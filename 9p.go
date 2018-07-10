@@ -79,6 +79,7 @@ func main() {
 		log.Fatal("Error: Root Attach failed with ", err)
 	}
 	fmt.Println("Root Qid: ", rqid)
+	defer session.Clunk(ctx, fid)
 	
 	// Walk root so that we can clunk it later(?)
 	fid++
@@ -86,6 +87,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error: Root Walk failed with ", err)
 	}
+	defer session.Clunk(ctx, fid)
 	
 	// Parse commands for the operation to perform
 	switch cmd {
