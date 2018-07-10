@@ -16,6 +16,9 @@ var noauth bool
 var addr string
 var aname string
 var uname string
+var msize int
+var version string
+var rfid p9p.Fid
 var cmd string
 var args []string
 
@@ -67,12 +70,12 @@ func main() {
 		log.Fatal("Error: 9p session failed with ", err)
 	}
 
-	msize, version := session.Version()
+	msize, version = session.Version()
 	fmt.Println("Message Size: ", msize, "\nVersion: ", version)
 	
 	// Attach root
 	var fid p9p.Fid = 0
-	rfid := fid
+	rfid = fid
 
 	rqid, err := session.Attach(ctx, fid, p9p.NOFID, uname, "/")
 	if err != nil {
@@ -119,4 +122,51 @@ func main() {
 		log.Fatal("Error: Specify a valid operation to perform.")
 	}
 
+}
+
+// List the files in a directory, takes flag arguments (wip)
+func ls(ctx context.Context, fid p9p.Fid, args ...string) error {
+	targetfid := c.nextfid
+	c.nextfid++
+	components := strings.Split(strings.Trim(p, "/"), "/")
+	if _, err := c.session.Walk(ctx, c.rootfid, targetfid, components...); err != nil {
+		return err
+	}
+	defer c.session.Clunk(ctx, targetfid)
+	
+	_, iounit, err := c.session.Open(ctx, targetfid, p9p.OREAD)
+	if err != nil {
+		return err
+	}
+	
+	if iounit < 1 {
+		msize, _ := c.session.Version()
+		iounit = uint32(msize - 24) // size of message max minus fcall io header (Rread)
+	}
+	
+	p := make([]byte, iounit)
+	
+	n, err := c.session.Read(ctx, targetfid, p, 0)
+	if err != nil {
+		return err
+	}
+	
+	rd := bytes.NewReader(p[:n])
+	codec := p9p.NewCodec() // TODO(stevvooe): Need way to resolve codec based on session.
+	for {
+		var d p9p.Dir
+		if err := p9p.DecodeDir(codec, rd, &d); err != nil {
+			if err == io.EOF {
+				break
+			}
+	
+			return err
+		}
+	
+		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(d.Mode), d.Length, d.ModTime, d.Name)
+	}
+	
+	if len(ps) > 1 {
+		fmt.Fprintln(wr, "")
+	}
 }
