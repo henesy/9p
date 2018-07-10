@@ -11,20 +11,77 @@ import (
 	"net"
 )
 
+var debug func(source, op, ...string)
 var chatty bool
 var noauth bool
 var addr string
 var aname string
 var uname string
 var msize int
-var version string
+var pversion string
 var rfid p9p.Fid
 var cmd string
 var args []string
 
 
-/* A program for connecting to 9p file servers and performing client ops */
+// Control for chattyPrint ← or →
+type source int
+const (
+	server source = iota
+	client
+)
+
+// Operation types for chattyPrint formatting
+type op int
+const (
+	version op = iota
+	auth
+	Rerror
+	flush
+	attach
+	walk
+	open
+	create
+	read
+)
+
+
+// If chatty is enabled, print out 9p transactions. go-p9p does not provide this, sadly. 
+func chattyPrint(s source, o op, extras ...string) {
+	var msg string = "<nil>"
+	arrow := '←'
+	if s == client {
+		arrow = '→'
+	}
+
+	switch o {
+		case version:
+			msg = "Rversion"
+			if s == client {
+				msg = "Tversion"
+			}
+
+			log.Printf("%c %s msize=%d version=%s\n", arrow, msg, msize, pversion)
+
+		default:
+			log.Println(arrow)
+	}
+}
+
+/* We wrap all the p9p.Session functions to let us */
+func Version(session p9p.Session) (int, string) {
+	debug(client, version)
+    msize, pversion = session.Version()
+    debug(server, version)
+	return msize, pversion
+}
+
+
+/* A program for connecting to 9p file servers and performing client ops. */
 func main() {
+	// Use 9p2000 by default, maybe extend this later if 9p2020 is finished
+	pversion = "9p2000"
+	debug = chattyPrint
 	usage := "usage: 9p [-Dn] [-a address] [-A aname] [-u user] cmd args..."
 	ctx := context.Background()
 
@@ -43,13 +100,18 @@ func main() {
 	if cmd == "" {
 		// No arguments outside of flags
 		flag.Usage()
-		log.Fatal("Error: Specify an operation to perform.")
+		log.Fatal("Error, Specify an operation to perform.")
 	}
 	args = flag.Args()[1:]
 	if len(args) < 1 {
 		// Require a path for all operations
 		flag.Usage()
-		log.Fatal("Error: Specify a path to apply the operation to.")
+		log.Fatal("Error, Specify a path to apply the operation to.")
+	}
+
+	if !chatty {
+		// No-op for debug if we don't want to be chatty
+		debug = func(source, op, ...string) {}
 	}
 
 	// Dial to 9p server
@@ -62,24 +124,25 @@ func main() {
 
 	conn, err := net.Dial(proto, addr)
 	if err != nil {
-		log.Fatal("Error: Dial failed with ", err)
+		log.Fatal("Error, Dial failed with: ", err)
 	}
 
 	session, err := p9p.NewSession(ctx, conn)
 	if err != nil {
-		log.Fatal("Error: 9p session failed with ", err)
+		log.Fatal("Error, 9p session failed with: ", err)
 	}
 
-	msize, version = session.Version()
-	fmt.Println("Message Size: ", msize, "\nVersion: ", version)
-	
+	debug(client, version)
+	msize, pversion = session.Version()
+	debug(server, version)
+
 	// Attach root
 	var fid p9p.Fid = 0
 	rfid = fid
 
 	rqid, err := session.Attach(ctx, fid, p9p.NOFID, uname, "/")
 	if err != nil {
-		log.Fatal("Error: Root Attach failed with ", err)
+		log.Fatal("Error, Root Attach failed with: ", err)
 	}
 	fmt.Println("Root Qid: ", rqid)
 	defer session.Clunk(ctx, fid)
@@ -88,7 +151,7 @@ func main() {
 	fid++
 	_, err = session.Walk(ctx, rfid, fid)
 	if err != nil {
-		log.Fatal("Error: Root Walk failed with ", err)
+		log.Fatal("Error, Root Walk failed with: ", err)
 	}
 	defer session.Clunk(ctx, fid)
 	
@@ -119,13 +182,13 @@ func main() {
 	case "cd":
 		
 	default:
-		log.Fatal("Error: Specify a valid operation to perform.")
+		log.Fatal("Error, Specify a valid operation to perform.")
 	}
 
 }
 
 // List the files in a directory, takes flag arguments (wip)
-func ls(ctx context.Context, fid p9p.Fid, args ...string) error {
+/*func ls(ctx context.Context, fid p9p.Fid, args ...string) error {
 	targetfid := c.nextfid
 	c.nextfid++
 	components := strings.Split(strings.Trim(p, "/"), "/")
@@ -169,4 +232,5 @@ func ls(ctx context.Context, fid p9p.Fid, args ...string) error {
 	if len(ps) > 1 {
 		fmt.Fprintln(wr, "")
 	}
-}
+}*/
+
