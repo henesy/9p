@@ -9,6 +9,7 @@ import (
 	"log"
 	"strings"
 	"net"
+sc	"strconv"
 )
 
 var debug func(source, op, ...string)
@@ -22,6 +23,8 @@ var pversion string
 var rfid p9p.Fid
 var cmd string
 var args []string
+var session p9p.Session
+var ctx context.Context
 
 
 // Control for chattyPrint ← or →
@@ -36,15 +39,26 @@ type op int
 const (
 	version op = iota
 	auth
-	Rerror
+	rerror
 	flush
 	attach
 	walk
 	open
 	create
 	read
+	clunk
 )
 
+
+// Converts a p9p.Fid to a string and so forth
+func fid2str(fid p9p.Fid) string {
+	return sc.Itoa(int(fid))
+}
+
+func fid2int(fid string) int {
+	d, _ := sc.Atoi(fid)
+	return d
+}
 
 // If chatty is enabled, print out 9p transactions. go-p9p does not provide this, sadly. 
 func chattyPrint(s source, o op, extras ...string) {
@@ -56,12 +70,32 @@ func chattyPrint(s source, o op, extras ...string) {
 
 	switch o {
 		case version:
-			msg = "Rversion"
 			if s == client {
 				msg = "Tversion"
 			}
-
+			msg = "Rversion"
 			log.Printf("%c %s msize=%d version=%s\n", arrow, msg, msize, pversion)
+
+		case clunk:
+			if s == client {
+				msg = "Tclunk"
+				log.Printf("%c %s fid=%d\n", arrow, msg, fid2int(extras[0]))
+				break
+			}
+			msg = "Rclunk"
+			log.Printf("%c %s\n", arrow, msg)
+
+		case walk:
+			if s == client {
+				msg = "Twalk"
+				log.Printf("%c %s fid=%d newfid=%d", arrow, msg, fid2int(extras[0]), fid2int(extras[1]))
+				break
+			}
+			msg = "Rwalk"
+			log.Printf("%c %s qids=%v\n", arrow, msg, extras)
+
+		case rerror:
+			msg = "Rerror"
 
 		default:
 			log.Println(arrow)
@@ -69,11 +103,45 @@ func chattyPrint(s source, o op, extras ...string) {
 }
 
 /* We wrap all the p9p.Session functions to let us */
-func Version(session p9p.Session) (int, string) {
+func Version() (int, string) {
 	debug(client, version)
     msize, pversion = session.Version()
     debug(server, version)
 	return msize, pversion
+}
+
+func Clunk(fid p9p.Fid) (err error) {
+	debug(client, clunk, fid2str(fid))
+	err = session.Clunk(ctx, fid)
+	if err != nil {
+		debug(server, rerror, err.Error())
+		return
+	}
+	debug(server, clunk, fid2str(fid))
+	return
+}
+
+func Walk(fid, newfid p9p.Fid) (nwqid []p9p.Qid, err error) {
+	debug(client, walk, fid2str(fid), fid2str(newfid))
+	nwqid, err = session.Walk(ctx, fid, newfid)
+	if err != nil {
+		debug(server, rerror, err.Error())
+		return
+	}
+
+	// This is the only place that qids need to be made into strings, so we use a closure.
+	debug(server, walk,
+		func() []string {
+			qids := make([]string, 0, len(nwqid))
+			for _, qid := range nwqid {
+				qids = append(qids, qid.String())
+			}
+			return qids
+		}()...)
+	return
+}
+
+func Attach() {
 }
 
 
@@ -83,7 +151,7 @@ func main() {
 	pversion = "9p2000"
 	debug = chattyPrint
 	usage := "usage: 9p [-Dn] [-a address] [-A aname] [-u user] cmd args..."
-	ctx := context.Background()
+	ctx = context.Background()
 
 	log.SetOutput(os.Stderr)
 	flag.Usage = func() {
@@ -127,14 +195,12 @@ func main() {
 		log.Fatal("Error, Dial failed with: ", err)
 	}
 
-	session, err := p9p.NewSession(ctx, conn)
+	session, err = p9p.NewSession(ctx, conn)
 	if err != nil {
 		log.Fatal("Error, 9p session failed with: ", err)
 	}
 
-	debug(client, version)
-	msize, pversion = session.Version()
-	debug(server, version)
+	msize, pversion = Version()
 
 	// Attach root
 	var fid p9p.Fid = 0
@@ -145,15 +211,15 @@ func main() {
 		log.Fatal("Error, Root Attach failed with: ", err)
 	}
 	fmt.Println("Root Qid: ", rqid)
-	defer session.Clunk(ctx, fid)
+	defer Clunk(fid)
 	
 	// Walk root so that we can clunk it later(?)
 	fid++
-	_, err = session.Walk(ctx, rfid, fid)
+	_, err = Walk(rfid, fid)
 	if err != nil {
 		log.Fatal("Error, Root Walk failed with: ", err)
 	}
-	defer session.Clunk(ctx, fid)
+	defer Clunk(fid)
 	
 	// Parse commands for the operation to perform
 	switch cmd {
