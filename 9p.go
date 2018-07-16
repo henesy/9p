@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/docker/go-p9p"
-	"golang.org/x/net/context"
+	"context"
 	"fmt"
 	"os"
 	"flag"
