@@ -74,16 +74,16 @@ func chattyPrint(s source, o op, extras ...string) {
 				msg = "Tversion"
 			}
 			msg = "Rversion"
-			log.Printf("%c %s msize=%d version=%s\n", arrow, msg, msize, pversion)
+			log.Printf("%c %s msize=%d version=%s", arrow, msg, msize, pversion)
 
 		case clunk:
 			if s == client {
 				msg = "Tclunk"
-				log.Printf("%c %s fid=%d\n", arrow, msg, fid2int(extras[0]))
+				log.Printf("%c %s fid=%d", arrow, msg, fid2int(extras[0]))
 				break
 			}
 			msg = "Rclunk"
-			log.Printf("%c %s\n", arrow, msg)
+			log.Printf("%c %s", arrow, msg)
 
 		case walk:
 			if s == client {
@@ -93,6 +93,15 @@ func chattyPrint(s source, o op, extras ...string) {
 			}
 			msg = "Rwalk"
 			log.Printf("%c %s qids=%v\n", arrow, msg, extras)
+
+		case attach:
+			if s == client {
+				msg = "Tattach"
+				log.Printf
+				break
+			}
+			msg = "Rattach"
+			log.Printf("%c %s fid=%d afid=%d uname=\"%s\" aname=\"%s\"\n", )
 
 		case rerror:
 			msg = "Rerror"
@@ -141,7 +150,15 @@ func Walk(fid, newfid p9p.Fid) (nwqid []p9p.Qid, err error) {
 	return
 }
 
-func Attach() {
+// We might want to pass in aname, but I'm not sure yet
+func Attach(fid, afid p9p.Fid) (qid p9p.Qid, err error) {
+	debug(client, attach)
+	qid, err = session.Attach(ctx, fid, afid, uname, aname)
+	if err != nil {
+		debug(server, rerror, err.Error())
+	}
+	debug(server, attach)
+	return
 }
 
 
@@ -206,7 +223,8 @@ func main() {
 	var fid p9p.Fid = 0
 	rfid = fid
 
-	rqid, err := session.Attach(ctx, fid, p9p.NOFID, uname, "/")
+	aname = "/"
+	rqid, err := Attach(fid, p9p.NOFID)
 	if err != nil {
 		log.Fatal("Error, Root Attach failed with: ", err)
 	}
