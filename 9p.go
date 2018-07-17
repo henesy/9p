@@ -51,11 +51,11 @@ const (
 
 
 // Converts a p9p.Fid to a string and so forth
-func fid2str(fid p9p.Fid) string {
+func f2s(fid p9p.Fid) string {
 	return sc.Itoa(int(fid))
 }
 
-func fid2int(fid string) int {
+func f2d(fid string) int {
 	d, _ := sc.Atoi(fid)
 	return d
 }
@@ -79,7 +79,7 @@ func chattyPrint(s source, o op, extras ...string) {
 		case clunk:
 			if s == client {
 				msg = "Tclunk"
-				log.Printf("%c %s fid=%d", arrow, msg, fid2int(extras[0]))
+				log.Printf("%c %s fid=%d", arrow, msg, f2d(extras[0]))
 				break
 			}
 			msg = "Rclunk"
@@ -88,7 +88,7 @@ func chattyPrint(s source, o op, extras ...string) {
 		case walk:
 			if s == client {
 				msg = "Twalk"
-				log.Printf("%c %s fid=%d newfid=%d", arrow, msg, fid2int(extras[0]), fid2int(extras[1]))
+				log.Printf("%c %s fid=%d newfid=%d", arrow, msg, f2d(extras[0]), f2d(extras[1]))
 				break
 			}
 			msg = "Rwalk"
@@ -97,11 +97,11 @@ func chattyPrint(s source, o op, extras ...string) {
 		case attach:
 			if s == client {
 				msg = "Tattach"
-				log.Printf
+				log.Printf("%c %s fid=%d afid=%d uname=\"%s\" aname=\"%s\"\n", arrow, msg, f2d(extras[0]), f2d(extras[1]), uname, aname)
 				break
 			}
 			msg = "Rattach"
-			log.Printf("%c %s fid=%d afid=%d uname=\"%s\" aname=\"%s\"\n", )
+			log.Printf("%c %s qid=%s", arrow, msg, extras[0])
 
 		case rerror:
 			msg = "Rerror"
@@ -120,18 +120,18 @@ func Version() (int, string) {
 }
 
 func Clunk(fid p9p.Fid) (err error) {
-	debug(client, clunk, fid2str(fid))
+	debug(client, clunk, f2s(fid))
 	err = session.Clunk(ctx, fid)
 	if err != nil {
 		debug(server, rerror, err.Error())
 		return
 	}
-	debug(server, clunk, fid2str(fid))
+	debug(server, clunk, f2s(fid))
 	return
 }
 
 func Walk(fid, newfid p9p.Fid) (nwqid []p9p.Qid, err error) {
-	debug(client, walk, fid2str(fid), fid2str(newfid))
+	debug(client, walk, f2s(fid), f2s(newfid))
 	nwqid, err = session.Walk(ctx, fid, newfid)
 	if err != nil {
 		debug(server, rerror, err.Error())
@@ -152,12 +152,12 @@ func Walk(fid, newfid p9p.Fid) (nwqid []p9p.Qid, err error) {
 
 // We might want to pass in aname, but I'm not sure yet
 func Attach(fid, afid p9p.Fid) (qid p9p.Qid, err error) {
-	debug(client, attach)
+	debug(client, attach, f2s(fid), f2s(afid))
 	qid, err = session.Attach(ctx, fid, afid, uname, aname)
 	if err != nil {
 		debug(server, rerror, err.Error())
 	}
-	debug(server, attach)
+	debug(server, attach, qid.String())
 	return
 }
 
