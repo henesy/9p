@@ -56,11 +56,6 @@ func f2s(fid p9p.Fid) string {
 	return sc.Itoa(int(fid))
 }
 
-func f2d(fid string) int {
-	d, _ := sc.Atoi(fid)
-	return d
-}
-
 // If chatty is enabled, print out 9p transactions. go-p9p does not provide this, sadly. 
 func chattyPrint(s source, o op, extras ...string) {
 	var msg string = "<nil>"
@@ -80,7 +75,7 @@ func chattyPrint(s source, o op, extras ...string) {
 		case clunk:
 			if s == client {
 				msg = "Tclunk"
-				log.Printf("%c %s fid=%d", arrow, msg, f2d(extras[0]))
+				log.Printf("%c %s fid=%s", arrow, msg, extras[0])
 				break
 			}
 			msg = "Rclunk"
@@ -89,20 +84,42 @@ func chattyPrint(s source, o op, extras ...string) {
 		case walk:
 			if s == client {
 				msg = "Twalk"
-				log.Printf("%c %s fid=%d newfid=%d", arrow, msg, f2d(extras[0]), f2d(extras[1]))
+				log.Printf("%c %s fid=%s newfid=%s", arrow, msg, extras[0], extras[1])
 				break
 			}
 			msg = "Rwalk"
-			log.Printf("%c %s qids=%v\n", arrow, msg, extras)
+			log.Printf("%c %s qids=%v", arrow, msg, extras)
 
 		case attach:
 			if s == client {
 				msg = "Tattach"
-				log.Printf("%c %s fid=%d afid=%d uname=\"%s\" aname=\"%s\"\n", arrow, msg, f2d(extras[0]), f2d(extras[1]), uname, aname)
+				afid := extras[1]
+				if afid == f2s(p9p.NOFID) {
+					afid = "<nil>"
+				}
+				log.Printf("%c %s fid=%s afid=%s uname=\"%s\" aname=\"%s\"", arrow, msg, extras[0], afid, uname, aname)
 				break
 			}
 			msg = "Rattach"
 			log.Printf("%c %s qid=%s", arrow, msg, extras[0])
+
+		case open:
+			if s == client {
+				msg = "Topen"
+				log.Printf("%c %s fid=%s mode=%s", arrow, msg, extras[0], extras[1])
+				break
+			}
+			msg = "Ropen"
+			log.Printf("%c %s qid=%s iounit=%s", arrow, msg, extras[0], extras[1])
+
+		case read:
+			if s == client {
+				msg = "Tread"
+				log.Printf("%c %s fid=%s offset=%s iounit=%s", arrow, msg, extras[0], extras[1], extras[2])
+				break
+			}
+			msg = "Rread"
+			log.Printf("%c %s iounit=%s", arrow, msg, extras[0])
 
 		case rerror:
 			msg = "Rerror"
@@ -160,6 +177,28 @@ func Attach(fid, afid p9p.Fid) (qid p9p.Qid, err error) {
 		debug(server, rerror, err.Error())
 	}
 	debug(server, attach, qid.String())
+	return
+}
+
+// Open a file/dir
+func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
+	err = nil
+	iounit = 0
+
+	debug(client, open, f2s(fid), sc.Itoa(int(mode)))
+	qid, iounit, err = session.Open(ctx, fid, mode)
+	if err != nil {
+		debug(server, rerror, err.Error())
+		return
+	}
+
+	if iounit < 1 {
+		// size of message max minus fcall io header (Rread)
+		iounit = uint32(msize - 24)
+	}
+
+	debug(server, open, qid.String(), sc.Itoa(int(iounit)))
+
 	return
 }
 
@@ -251,7 +290,8 @@ func main() {
 		Read()
 
 	case "readfd":
-		
+		// Read, but with an fd argument
+
 	case "write":
 		
 	case "writefd":
@@ -267,9 +307,28 @@ func main() {
 	case "rm":
 		
 	case "open":
-		
+		if len(args) > 1 {
+			log.Fatal("Error, open takes a single argument.")
+		}
+		// Walk
+		names := strings.Split(strings.TrimSpace(strings.Trim(args[0], "/")), "/")
+		nfid++
+		fid := nfid
+		_, err = Walk(rfid, fid, names...)
+		if err != nil {
+			log.Fatal("Error, unable to walk for open: ", err)
+		}
+		defer Clunk(fid)
+
+		// Open
+		_, _, err = Open(fid, p9p.OREAD)
+		if err != nil {
+			log.Fatal("Error, unable to open for open: ", err)
+		}
+
 	case "openfd":
-		
+		// Open, but with an fd argument
+
 	case "cd":
 		
 	default:
@@ -301,10 +360,12 @@ func Read() error {
 	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
 
 	var offset int64 = 0
+	// count in this fn is the sum of bytes read
 	var count int = 0
 	var n int = 1
 	for ;; offset += int64(n) {
-			debug(client, read, args[0])
+			buf = make([]byte, width)
+			debug(client, read, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)))
 			n, err = session.Read(ctx, fid, buf, offset)
 			//fmt.Fprintln(os.Stderr, "Read: ", n, err)
 			count += n
@@ -323,7 +384,7 @@ func Read() error {
 			}
 
 			// Output
-			nout, err := os.Stdout.Write(buf[:count])
+			nout, err := os.Stdout.Write(buf[:n])
 			if nout < 0 || err != nil {
 				log.Fatal("Error, read output error: ", err)
 			}
@@ -332,25 +393,4 @@ func Read() error {
 	return nil
 }
 
-// Open a file
-func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
-	err = nil
-	iounit = 0
-
-	debug(client, open, f2s(fid), sc.Itoa(int(mode)))
-	qid, iounit, err = session.Open(ctx, fid, mode)
-	if err != nil {
-		debug(server, rerror, err.Error())
-		return
-	}
-	// maybe put this after the if?
-	debug(server, read, f2s(fid), sc.Itoa(int(iounit)))
-
-	if iounit < 1 {
-		// size of message max minus fcall io header (Rread)
-		iounit = uint32(msize - 24)
-	}
-
-	return
-}
 
