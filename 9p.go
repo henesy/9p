@@ -226,11 +226,12 @@ func main() {
 	rfid = nfid
 
 	aname = "/"
-	rqid, err := Attach(nfid, p9p.NOFID)
+	// root Qid is not being used, yet 
+	_, err = Attach(nfid, p9p.NOFID)
 	if err != nil {
 		log.Fatal("Error, Root Attach failed with: ", err)
 	}
-	fmt.Println("Root Qid: ", rqid)
+	//fmt.Println("Root Qid: ", rqid)
 	defer Clunk(nfid)
 	
 	// Walk root so that we can clunk it later(?)
@@ -300,7 +301,8 @@ func Read() error {
 	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
 	debug(client, read, args[0])
 	n, err := session.Read(ctx, fid, buf, 0)
-	fmt.Fprintln(os.Stderr, "Read: ", n, err)
+	//fmt.Fprintln(os.Stderr, "Read: ", n, err)
+
 	if n < 0 {
 		log.Fatal("Error, read error: ", err)
 	}
@@ -311,7 +313,7 @@ func Read() error {
 	}
 
 	// Output
-	n, err = os.Stdout.Write(buf)
+	n, err = os.Stdout.Write(buf[:n])
 	if n < 0 || err != nil {
         log.Fatal("Error, read output error: ", err)
     }
