@@ -128,6 +128,15 @@ func chattyPrint(s source, o op, extras ...string) {
 			msg = "Rread"
 			log.Printf("%c %s iounit=%s", arrow, msg, extras[0])
 
+		case stat:
+			if s == client {
+				msg = "Tstat"
+				log.Printf("%c %s fid=%s", arrow, msg, extras[0])
+				break
+			}
+			msg = "Rstat"
+			log.Printf("%c %s dir=%s", arrow, msg, extras[0])
+
 		case rerror:
 			msg = "Rerror"
 			log.Printf("%c %s %s", arrow, msg, extras[0])
@@ -287,7 +296,7 @@ func main() {
 		log.Fatal("Error, Root Walk failed with: ", err)
 	}
 	defer Clunk(nfid)
-	
+
 	// Parse commands for the operation to perform
 	switch cmd {
 	case "read":
@@ -300,9 +309,6 @@ func main() {
 		// Read, but with an fd argument
 
 	case "write":
-		
-	case "writefd":
-		// Write, but with an fd argument
 
 	case "stat":
 		if len(args) > 1 {
@@ -311,13 +317,15 @@ func main() {
 		Stat()
 
 	case "rdwr":
-		
+
 	case "ls":
-		
+
 	case "create":
-		
+
+	case "mkdir":
+
 	case "rm":
-		
+
 	case "open":
 		if len(args) > 1 {
 			log.Fatal("Error, open takes a single argument.")
@@ -338,9 +346,6 @@ func main() {
 			log.Fatal("Error, unable to open for open: ", err)
 		}
 
-	case "openfd":
-		// Open, but with an fd argument
-
 	default:
 		log.Fatal("Error, Specify a valid operation to perform.")
 	}
@@ -360,9 +365,9 @@ func Stat() (info p9p.Dir, err error) {
 		return
 	}
 
-	debug(client, stat)
+	debug(client, stat, f2s(fid))
 	info, err = session.Stat(ctx, fid)
-	debug(server, stat)
+	debug(server, stat, info.String())
 	if err != nil {
 		return
 	}
