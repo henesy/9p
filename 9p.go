@@ -10,6 +10,7 @@ import (
 	"strings"
 	"net"
 sc	"strconv"
+	"text/tabwriter"
 )
 
 var debug func(source, op, ...string)
@@ -48,8 +49,14 @@ const (
 	create
 	read
 	clunk
+	stat
 )
 
+
+// Returns the names in path (typically args)
+func mknames(path string) []string {
+	return strings.Split(strings.TrimSpace(strings.Trim(path, "/")), "/")
+}
 
 // Converts a p9p.Fid to a string and so forth
 func f2s(fid p9p.Fid) string {
@@ -295,9 +302,14 @@ func main() {
 	case "write":
 		
 	case "writefd":
-		
+		// Write, but with an fd argument
+
 	case "stat":
-		
+		if len(args) > 1 {
+			log.Fatal("Error, stat takes a single argument.")
+		}
+		Stat()
+
 	case "rdwr":
 		
 	case "ls":
@@ -311,7 +323,7 @@ func main() {
 			log.Fatal("Error, open takes a single argument.")
 		}
 		// Walk
-		names := strings.Split(strings.TrimSpace(strings.Trim(args[0], "/")), "/")
+		names := mknames(args[0])
 		nfid++
 		fid := nfid
 		_, err = Walk(rfid, fid, names...)
@@ -329,12 +341,36 @@ func main() {
 	case "openfd":
 		// Open, but with an fd argument
 
-	case "cd":
-		
 	default:
 		log.Fatal("Error, Specify a valid operation to perform.")
 	}
 
+}
+
+// Stat a file
+func Stat() (info p9p.Dir, err error) {
+	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
+	nfid++
+	fid := nfid
+	defer Clunk(fid)
+
+	names := mknames(args[0])
+	_, err = Walk(rfid, fid, names...)
+	if err != nil {
+		return
+	}
+
+	debug(client, stat)
+	info, err = session.Stat(ctx, fid)
+	debug(server, stat)
+	if err != nil {
+		return
+	}
+
+	fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime, info.Name)
+	wr.Flush()
+
+	return info, nil
 }
 
 // Read bytes from a file
@@ -344,7 +380,7 @@ func Read() error {
 	defer Clunk(fid)
 
 	// Walk -- don't need []Qid's for now
-	names := strings.Split(strings.TrimSpace(strings.Trim(args[0], "/")), "/")
+	names := mknames(args[0])
 	_, err := Walk(rfid, fid, names...)
 	if err != nil {
 		return err
