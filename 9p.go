@@ -299,24 +299,35 @@ func Read() error {
 	buf := make([]byte, width)
 
 	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
-	debug(client, read, args[0])
-	n, err := session.Read(ctx, fid, buf, 0)
-	//fmt.Fprintln(os.Stderr, "Read: ", n, err)
 
-	if n < 0 {
-		log.Fatal("Error, read error: ", err)
-	}
-	if err != nil {
-		debug(server, rerror, err.Error())
-	} else {
-		debug(server, read, sc.Itoa(n))
-	}
+	var offset int64 = 0
+	var count int = 0
+	var n int = 1
+	for ;; offset += int64(n) {
+			debug(client, read, args[0])
+			n, err = session.Read(ctx, fid, buf, offset)
+			//fmt.Fprintln(os.Stderr, "Read: ", n, err)
+			count += n
 
-	// Output
-	n, err = os.Stdout.Write(buf[:n])
-	if n < 0 || err != nil {
-        log.Fatal("Error, read output error: ", err)
-    }
+			if n < 0 {
+				log.Fatal("Error, read error: ", err)
+			}
+			if err != nil {
+				debug(server, rerror, err.Error())
+			} else {
+				debug(server, read, sc.Itoa(n))
+			}
+
+			if n == 0 {
+				break
+			}
+
+			// Output
+			nout, err := os.Stdout.Write(buf[:count])
+			if nout < 0 || err != nil {
+				log.Fatal("Error, read output error: ", err)
+			}
+	}
 
 	return nil
 }
