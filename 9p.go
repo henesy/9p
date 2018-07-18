@@ -21,6 +21,7 @@ var uname string
 var msize int
 var pversion string
 var rfid p9p.Fid
+var nfid p9p.Fid
 var cmd string
 var args []string
 var session p9p.Session
@@ -105,6 +106,7 @@ func chattyPrint(s source, o op, extras ...string) {
 
 		case rerror:
 			msg = "Rerror"
+			log.Printf("%c %s %s", arrow, msg, extras[0])
 
 		default:
 			log.Println(arrow)
@@ -130,9 +132,9 @@ func Clunk(fid p9p.Fid) (err error) {
 	return
 }
 
-func Walk(fid, newfid p9p.Fid) (nwqid []p9p.Qid, err error) {
+func Walk(fid, newfid p9p.Fid, names ...string) (nwqid []p9p.Qid, err error) {
 	debug(client, walk, f2s(fid), f2s(newfid))
-	nwqid, err = session.Walk(ctx, fid, newfid)
+	nwqid, err = session.Walk(ctx, fid, newfid, names...)
 	if err != nil {
 		debug(server, rerror, err.Error())
 		return
@@ -220,29 +222,33 @@ func main() {
 	msize, pversion = Version()
 
 	// Attach root
-	var fid p9p.Fid = 0
-	rfid = fid
+	nfid = 0
+	rfid = nfid
 
 	aname = "/"
-	rqid, err := Attach(fid, p9p.NOFID)
+	rqid, err := Attach(nfid, p9p.NOFID)
 	if err != nil {
 		log.Fatal("Error, Root Attach failed with: ", err)
 	}
 	fmt.Println("Root Qid: ", rqid)
-	defer Clunk(fid)
+	defer Clunk(nfid)
 	
 	// Walk root so that we can clunk it later(?)
-	fid++
-	_, err = Walk(rfid, fid)
+	nfid++
+	_, err = Walk(rfid, nfid)
 	if err != nil {
 		log.Fatal("Error, Root Walk failed with: ", err)
 	}
-	defer Clunk(fid)
+	defer Clunk(nfid)
 	
 	// Parse commands for the operation to perform
 	switch cmd {
 	case "read":
-		
+		if len(args) > 1 {
+			log.Fatal("Error, read takes a single argument.")
+		}
+		Read()
+
 	case "readfd":
 		
 	case "write":
@@ -271,50 +277,67 @@ func main() {
 
 }
 
-// List the files in a directory, takes flag arguments (wip)
-/*func ls(ctx context.Context, fid p9p.Fid, args ...string) error {
-	targetfid := c.nextfid
-	c.nextfid++
-	components := strings.Split(strings.Trim(p, "/"), "/")
-	if _, err := c.session.Walk(ctx, c.rootfid, targetfid, components...); err != nil {
-		return err
-	}
-	defer c.session.Clunk(ctx, targetfid)
-	
-	_, iounit, err := c.session.Open(ctx, targetfid, p9p.OREAD)
+// Read bytes from a file
+func Read() error {
+	nfid++
+	var fid p9p.Fid = nfid
+	defer Clunk(fid)
+
+	// Walk -- don't need []Qid's for now
+	names := strings.Split(strings.TrimSpace(strings.Trim(args[0], "/")), "/")
+	_, err := Walk(rfid, fid, names...)
 	if err != nil {
 		return err
 	}
-	
+
+	// Open -- don't need Qid for now
+	_, width, err := Open(fid, p9p.OREAD)
+	if err != nil {
+		log.Fatal("Error, Open failed: ", err)
+	}
+	buf := make([]byte, width)
+
+	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
+	debug(client, read, args[0])
+	n, err := session.Read(ctx, fid, buf, 0)
+	fmt.Fprintln(os.Stderr, "Read: ", n, err)
+	if n < 0 {
+		log.Fatal("Error, read error: ", err)
+	}
+	if err != nil {
+		debug(server, rerror, err.Error())
+	} else {
+		debug(server, read, sc.Itoa(n))
+	}
+
+	// Output
+	n, err = os.Stdout.Write(buf)
+	if n < 0 || err != nil {
+        log.Fatal("Error, read output error: ", err)
+    }
+
+	return nil
+}
+
+// Open a file
+func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
+	err = nil
+	iounit = 0
+
+	debug(client, open, f2s(fid), sc.Itoa(int(mode)))
+	qid, iounit, err = session.Open(ctx, fid, mode)
+	if err != nil {
+		debug(server, rerror, err.Error())
+		return
+	}
+	// maybe put this after the if?
+	debug(server, read, f2s(fid), sc.Itoa(int(iounit)))
+
 	if iounit < 1 {
-		msize, _ := c.session.Version()
-		iounit = uint32(msize - 24) // size of message max minus fcall io header (Rread)
+		// size of message max minus fcall io header (Rread)
+		iounit = uint32(msize - 24)
 	}
-	
-	p := make([]byte, iounit)
-	
-	n, err := c.session.Read(ctx, targetfid, p, 0)
-	if err != nil {
-		return err
-	}
-	
-	rd := bytes.NewReader(p[:n])
-	codec := p9p.NewCodec() // TODO(stevvooe): Need way to resolve codec based on session.
-	for {
-		var d p9p.Dir
-		if err := p9p.DecodeDir(codec, rd, &d); err != nil {
-			if err == io.EOF {
-				break
-			}
-	
-			return err
-		}
-	
-		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(d.Mode), d.Length, d.ModTime, d.Name)
-	}
-	
-	if len(ps) > 1 {
-		fmt.Fprintln(wr, "")
-	}
-}*/
+
+	return
+}
 
