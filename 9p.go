@@ -362,6 +362,7 @@ func Stat() (info p9p.Dir, err error) {
 	names := mknames(args[0])
 	_, err = Walk(rfid, fid, names...)
 	if err != nil {
+		log.Fatal("Error, walk for stat failed: ", err)
 		return
 	}
 
@@ -369,6 +370,7 @@ func Stat() (info p9p.Dir, err error) {
 	info, err = session.Stat(ctx, fid)
 	debug(server, stat, info.String())
 	if err != nil {
+		log.Fatal("Error, stat failed: ", err)
 		return
 	}
 
