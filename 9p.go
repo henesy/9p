@@ -397,7 +397,7 @@ func Ls() error {
 	return nil
 }
 
-// Read bytes from a file
+// Read bytes from a file -- This needs an argument to not use the list and return []byte (in the case of streams)
 func Read() ([]byte, error) {
 	nfid++
 	var fid p9p.Fid = nfid
