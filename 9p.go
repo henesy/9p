@@ -11,6 +11,7 @@ import (
 	"net"
 sc	"strconv"
 	"text/tabwriter"
+	"container/list"
 )
 
 var debug func(source, op, ...string)
@@ -218,6 +219,34 @@ func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
 	return
 }
 
+// Stat a file
+func Stat() (info p9p.Dir, err error) {
+	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
+	nfid++
+	fid := nfid
+	defer Clunk(fid)
+
+	names := mknames(args[0])
+	_, err = Walk(rfid, fid, names...)
+	if err != nil {
+		log.Fatal("Error, walk for stat failed: ", err)
+		return
+	}
+
+	debug(client, stat, f2s(fid))
+	info, err = session.Stat(ctx, fid)
+	debug(server, stat, info.String())
+	if err != nil {
+		log.Fatal("Error, stat failed: ", err)
+		return
+	}
+
+	fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime, info.Name)
+	wr.Flush()
+
+	return info, nil
+}
+
 
 /* A program for connecting to 9p file servers and performing client ops. */
 func main() {
@@ -319,6 +348,10 @@ func main() {
 	case "rdwr":
 
 	case "ls":
+		if len(args) > 1 {
+			log.Fatal("Error, ls takes a single argument.")
+		}
+		Ls()
 
 	case "create":
 
@@ -352,36 +385,20 @@ func main() {
 
 }
 
-// Stat a file
-func Stat() (info p9p.Dir, err error) {
+
+// List files in a directory
+func Ls() error {
 	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
-	nfid++
-	fid := nfid
-	defer Clunk(fid)
-
-	names := mknames(args[0])
-	_, err = Walk(rfid, fid, names...)
-	if err != nil {
-		log.Fatal("Error, walk for stat failed: ", err)
-		return
-	}
-
-	debug(client, stat, f2s(fid))
-	info, err = session.Stat(ctx, fid)
-	debug(server, stat, info.String())
-	if err != nil {
-		log.Fatal("Error, stat failed: ", err)
-		return
-	}
-
-	fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime, info.Name)
-	wr.Flush()
-
-	return info, nil
+	
+	dir, _ := Stat()
+	
+	
+	
+	return nil
 }
 
 // Read bytes from a file
-func Read() error {
+func Read() ([]byte, error) {
 	nfid++
 	var fid p9p.Fid = nfid
 	defer Clunk(fid)
@@ -390,7 +407,7 @@ func Read() error {
 	names := mknames(args[0])
 	_, err := Walk(rfid, fid, names...)
 	if err != nil {
-		return err
+		log.Fatal("Error, walk for open failed: ", err)
 	}
 
 	// Open -- don't need Qid for now
@@ -399,9 +416,11 @@ func Read() error {
 		log.Fatal("Error, Open failed: ", err)
 	}
 	buf := make([]byte, width)
+	// To return, we need to expand this dynamically
+	bytelist := list.New()
+	bytelist.Init()
 
 	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
-
 	var offset int64 = 0
 	// count in this fn is the sum of bytes read
 	var count int = 0
@@ -425,6 +444,8 @@ func Read() error {
 			if n == 0 {
 				break
 			}
+			
+			bytelist.PushBack(buf[:n])
 
 			// Output
 			nout, err := os.Stdout.Write(buf[:n])
@@ -433,7 +454,16 @@ func Read() error {
 			}
 	}
 
-	return nil
+	// Compose all bytes written to a single []byte to return (maybe make this optional for performance?)
+	allbytes := make([]byte, 0, bytelist.Len())
+	for bytelist.Front() != nil {
+		bytes := bytelist.Remove(bytelist.Front()).([]byte)
+		for _, b := range bytes {
+			allbytes = append(allbytes, b)
+		}
+	}
+	
+	return allbytes, nil
 }
 
 
