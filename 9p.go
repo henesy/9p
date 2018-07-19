@@ -12,6 +12,8 @@ import (
 sc	"strconv"
 	"text/tabwriter"
 	"container/list"
+	"io"
+	"bytes"
 )
 
 var debug func(source, op, ...string)
@@ -51,6 +53,14 @@ const (
 	read
 	clunk
 	stat
+)
+
+// Control for Read()
+type mode int
+const (
+	nowrite mode = iota
+	nolist
+	nomode
 )
 
 
@@ -220,7 +230,7 @@ func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
 }
 
 // Stat a file
-func Stat() (info p9p.Dir, err error) {
+func Stat(m mode) (info p9p.Dir, err error) {
 	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
 	nfid++
 	fid := nfid
@@ -241,7 +251,10 @@ func Stat() (info p9p.Dir, err error) {
 		return
 	}
 
-	fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime, info.Name)
+	if m != nowrite {
+		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime, info.Name)
+	}
+	
 	wr.Flush()
 
 	return info, nil
@@ -332,7 +345,7 @@ func main() {
 		if len(args) > 1 {
 			log.Fatal("Error, read takes a single argument.")
 		}
-		Read()
+		Read(nolist)
 
 	case "readfd":
 		// Read, but with an fd argument
@@ -343,7 +356,7 @@ func main() {
 		if len(args) > 1 {
 			log.Fatal("Error, stat takes a single argument.")
 		}
-		Stat()
+		Stat(nomode)
 
 	case "rdwr":
 
@@ -390,15 +403,36 @@ func main() {
 func Ls() error {
 	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
 	
-	dir, _ := Stat()
+	dir, err := Stat(nowrite)
+	if err != nil {
+		log.Fatal("Error, failed stat for ls: ", err)
+	}
+	allbytes, err := Read(nowrite)
+	if err != nil {
+		log.Fatal("Error, failed read for ls: ", err)
+	}
+	rd := bytes.NewReader(allbytes)
+	codec := p9p.NewCodec()
 	
+	for {
+		err = p9p.DecodeDir(codec, rd, &dir)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				log.Fatal("Error, dir decode failed for ls: ", err)
+			}
+		}
+		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(dir.Mode), dir.Length, dir.ModTime, dir.Name)
+	}
 	
+	wr.Flush()
 	
 	return nil
 }
 
 // Read bytes from a file -- This needs an argument to not use the list and return []byte (in the case of streams)
-func Read() ([]byte, error) {
+func Read(m mode) ([]byte, error) {
 	nfid++
 	var fid p9p.Fid = nfid
 	defer Clunk(fid)
@@ -445,24 +479,31 @@ func Read() ([]byte, error) {
 				break
 			}
 			
-			bytelist.PushBack(buf[:n])
-
-			// Output
-			nout, err := os.Stdout.Write(buf[:n])
-			if nout < 0 || err != nil {
-				log.Fatal("Error, read output error: ", err)
+			if m != nolist {
+				bytelist.PushBack(buf[:n])
+			}
+			
+			if m != nowrite {
+				// Output
+				nout, err := os.Stdout.Write(buf[:n])
+				if nout < 0 || err != nil {
+					log.Fatal("Error, read output error: ", err)
+				}
 			}
 	}
 
-	// Compose all bytes written to a single []byte to return (maybe make this optional for performance?)
-	allbytes := make([]byte, 0, bytelist.Len())
-	for bytelist.Front() != nil {
-		bytes := bytelist.Remove(bytelist.Front()).([]byte)
-		for _, b := range bytes {
-			allbytes = append(allbytes, b)
+	var allbytes []byte
+	if m != nolist {
+		// Compose all bytes written to a single []byte to return (maybe make this optional for performance?)
+		allbytes = make([]byte, 0, bytelist.Len())
+		for bytelist.Front() != nil {
+			bytes := bytelist.Remove(bytelist.Front()).([]byte)
+			for _, b := range bytes {
+				allbytes = append(allbytes, b)
+			}
 		}
 	}
-	
+		
 	return allbytes, nil
 }
 
