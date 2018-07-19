@@ -343,7 +343,15 @@ func main() {
 	// Use 9p2000 by default, maybe extend this later if 9p2020 is finished
 	pversion = "9p2000"
 	debug = chattyPrint
-	usage := "usage: 9p [-Dn] [-a address] [-A aname] [-u user] cmd args..."
+
+	usage := `usage: 9p [-Dn] [-a address] [-A aname] [-u user] cmd args...
+	commands available:
+		read
+		stat
+		ls
+		open
+	`
+	
 	ctx = context.Background()
 
 	log.SetOutput(os.Stderr)
