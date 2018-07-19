@@ -16,6 +16,7 @@ sc	"strconv"
 	"bytes"
 )
 
+const timeFormat string = "01-02-2006 15:04:05 MST"
 var debug func(source, op, ...string)
 var chatty bool
 var noauth bool
@@ -229,6 +230,82 @@ func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
 	return
 }
 
+// Read bytes from a file -- This needs an argument to not use the list and return []byte (in the case of streams)
+func Read(m mode) ([]byte, error) {
+	nfid++
+	var fid p9p.Fid = nfid
+	defer Clunk(fid)
+
+	// Walk -- don't need []Qid's for now
+	names := mknames(args[0])
+	_, err := Walk(rfid, fid, names...)
+	if err != nil {
+		log.Fatal("Error, walk for open failed: ", err)
+	}
+
+	// Open -- don't need Qid for now
+	_, width, err := Open(fid, p9p.OREAD)
+	if err != nil {
+		log.Fatal("Error, Open failed: ", err)
+	}
+	buf := make([]byte, width)
+	// To return, we need to expand this dynamically
+	bytelist := list.New()
+	bytelist.Init()
+
+	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
+	var offset int64 = 0
+	// count in this fn is the sum of bytes read
+	var count int = 0
+	var n int = 1
+	for ;; offset += int64(n) {
+			buf = make([]byte, width)
+			debug(client, read, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)))
+			n, err = session.Read(ctx, fid, buf, offset)
+			//fmt.Fprintln(os.Stderr, "Read: ", n, err)
+			count += n
+
+			if n < 0 {
+				log.Fatal("Error, read error: ", err)
+			}
+			if err != nil {
+				debug(server, rerror, err.Error())
+			} else {
+				debug(server, read, sc.Itoa(n))
+			}
+
+			if n == 0 {
+				break
+			}
+			
+			if m != nolist {
+				bytelist.PushBack(buf[:n])
+			}
+			
+			if m != nowrite {
+				// Output
+				nout, err := os.Stdout.Write(buf[:n])
+				if nout < 0 || err != nil {
+					log.Fatal("Error, read output error: ", err)
+				}
+			}
+	}
+
+	var allbytes []byte
+	if m != nolist {
+		// Compose all bytes written to a single []byte to return (maybe make this optional for performance?)
+		allbytes = make([]byte, 0, count)
+		for bytelist.Front() != nil {
+			bytes := bytelist.Remove(bytelist.Front()).([]byte)
+			for _, b := range bytes {
+				allbytes = append(allbytes, b)
+			}
+		}
+	}
+		
+	return allbytes, nil
+}
+
 // Stat a file
 func Stat(m mode) (info p9p.Dir, err error) {
 	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
@@ -252,7 +329,7 @@ func Stat(m mode) (info p9p.Dir, err error) {
 	}
 
 	if m != nowrite {
-		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime, info.Name)
+		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(info.Mode), info.Length, info.ModTime.Format(timeFormat), info.Name)
 	}
 	
 	wr.Flush()
@@ -347,9 +424,6 @@ func main() {
 		}
 		Read(nolist)
 
-	case "readfd":
-		// Read, but with an fd argument
-
 	case "write":
 
 	case "stat":
@@ -423,88 +497,16 @@ func Ls() error {
 				log.Fatal("Error, dir decode failed for ls: ", err)
 			}
 		}
-		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(dir.Mode), dir.Length, dir.ModTime, dir.Name)
+		name := dir.Name
+		if os.FileMode(dir.Mode).IsDir() {
+			name += "/"
+		}
+		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(dir.Mode), dir.Length, dir.ModTime.Format(timeFormat), name)
 	}
 	
 	wr.Flush()
 	
 	return nil
-}
-
-// Read bytes from a file -- This needs an argument to not use the list and return []byte (in the case of streams)
-func Read(m mode) ([]byte, error) {
-	nfid++
-	var fid p9p.Fid = nfid
-	defer Clunk(fid)
-
-	// Walk -- don't need []Qid's for now
-	names := mknames(args[0])
-	_, err := Walk(rfid, fid, names...)
-	if err != nil {
-		log.Fatal("Error, walk for open failed: ", err)
-	}
-
-	// Open -- don't need Qid for now
-	_, width, err := Open(fid, p9p.OREAD)
-	if err != nil {
-		log.Fatal("Error, Open failed: ", err)
-	}
-	buf := make([]byte, width)
-	// To return, we need to expand this dynamically
-	bytelist := list.New()
-	bytelist.Init()
-
-	// Read -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
-	var offset int64 = 0
-	// count in this fn is the sum of bytes read
-	var count int = 0
-	var n int = 1
-	for ;; offset += int64(n) {
-			buf = make([]byte, width)
-			debug(client, read, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)))
-			n, err = session.Read(ctx, fid, buf, offset)
-			//fmt.Fprintln(os.Stderr, "Read: ", n, err)
-			count += n
-
-			if n < 0 {
-				log.Fatal("Error, read error: ", err)
-			}
-			if err != nil {
-				debug(server, rerror, err.Error())
-			} else {
-				debug(server, read, sc.Itoa(n))
-			}
-
-			if n == 0 {
-				break
-			}
-			
-			if m != nolist {
-				bytelist.PushBack(buf[:n])
-			}
-			
-			if m != nowrite {
-				// Output
-				nout, err := os.Stdout.Write(buf[:n])
-				if nout < 0 || err != nil {
-					log.Fatal("Error, read output error: ", err)
-				}
-			}
-	}
-
-	var allbytes []byte
-	if m != nolist {
-		// Compose all bytes written to a single []byte to return (maybe make this optional for performance?)
-		allbytes = make([]byte, 0, bytelist.Len())
-		for bytelist.Front() != nil {
-			bytes := bytelist.Remove(bytelist.Front()).([]byte)
-			for _, b := range bytes {
-				allbytes = append(allbytes, b)
-			}
-		}
-	}
-		
-	return allbytes, nil
 }
 
 
