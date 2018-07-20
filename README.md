@@ -12,11 +12,11 @@ A set of tools for interacting with 9p filesystems written in Go.
 
 To perform an `ls(1)` operation on the `/` directory of a local 9p server on port 5640:
 
-	./9p -a 'localhost:5640' ls /
+	./9p -a 'localhost!5640' ls /
 
 To listen to the /grid/ radio:
 
-	./9p -a 'plan-nue.youkai.pw:4458' read radio | mplayer -cache 2048 -
+	./9p -a 'plan-nue.youkai.pw!4458' read radio | mplayer -cache 2048 -
 
 To listen to the /grid/ radio from a unix socket in `namespace`:
 
