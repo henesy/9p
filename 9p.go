@@ -33,14 +33,21 @@ var session p9p.Session
 var ctx context.Context
 
 
-// Control for chattyPrint ← or →
+// Control for chattyprint ← or →
 type source int
 const (
 	server source = iota
 	client
 )
 
-// Operation types for chattyPrint formatting
+// Supported connection protocols
+type protocol int
+const (
+	tcp protocol = iota
+	unix
+)
+
+// Operation types for chattyprint formatting
 type op int
 const (
 	version op = iota
@@ -65,6 +72,39 @@ const (
 )
 
 
+// Parses the dial string input to net.Dial() format
+func parsedialstr(dialstr string) (proto, address string) {
+	proto = "tcp"
+	address = dialstr
+	if strings.HasPrefix(dialstr, "unix!") {
+		// Dialing into a unix namespace
+		proto = "unix"
+		address = dialstr[5:]
+	} else if strings.HasPrefix(dialstr, "tcp!") {
+		proto = "tcp"
+		address = dialstr[4:]
+	} else {
+		address = dialstr
+	}
+
+	// Should add a default port at some point (for cwfs/fossil/venti/hjfs)
+	if parts := strings.Split(address, "!"); len(parts) > 1 {
+		address = ""
+		for p, v := range parts {
+			if p == len(parts) - 1 {
+				address += ":" + v
+			} else if p == 0 {
+				address += v
+			} else {
+				address += "!" + v
+			}
+		}
+
+	}
+
+	return
+}
+
 // Returns the names in path (typically args)
 func mknames(path string) []string {
 	return strings.Split(strings.TrimSpace(strings.Trim(path, "/")), "/")
@@ -76,7 +116,7 @@ func f2s(fid p9p.Fid) string {
 }
 
 // If chatty is enabled, print out 9p transactions. go-p9p does not provide this, sadly. 
-func chattyPrint(s source, o op, extras ...string) {
+func chattyprint(s source, o op, extras ...string) {
 	var msg string = "<nil>"
 	arrow := '←'
 	if s == client {
@@ -342,7 +382,7 @@ func Stat(m mode) (info p9p.Dir, err error) {
 func main() {
 	// Use 9p2000 by default, maybe extend this later if 9p2020 is finished
 	pversion = "9p2000"
-	debug = chattyPrint
+	debug = chattyprint
 
 	usage := `usage: 9p [-Dn] [-a address] [-A aname] [-u user] cmd args...
 	commands available:
@@ -384,12 +424,7 @@ func main() {
 	}
 
 	// Dial to 9p server
-	proto := "tcp"
-	if strings.HasPrefix(addr, "unix!") {
-		// Dialing into a unix namespace
-		proto = "unix"
-		addr = addr[5:]
-	}
+	proto, addr := parsedialstr(addr)
 
 	conn, err := net.Dial(proto, addr)
 	if err != nil {
