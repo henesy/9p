@@ -170,6 +170,15 @@ func chattyprint(s source, o op, extras ...string) {
 			}
 			msg = "Ropen"
 			log.Printf("%c %s qid=%s iounit=%s", arrow, msg, extras[0], extras[1])
+			
+		case create:
+			if s == client {
+				msg = "Tcreate"
+				log.Printf("%c %s fid=%s name=%s perm=%s mode=%s", arrow, msg, extras[0], extras[1], extras[2], extras[3])
+				break
+			}
+			msg = "Rcreate"
+			log.Printf("%c %s qid=%s iounit=%s", arrow, msg, extras[0], extras[1])
 
 		case read:
 			if s == client {
@@ -390,6 +399,7 @@ func main() {
 		stat
 		ls
 		open
+		create
 	`
 	
 	ctx = context.Background()
@@ -484,7 +494,17 @@ func main() {
 		Ls()
 
 	case "create":
-
+		if len(args) != 2 {
+			log.Fatal("Error, create takes a file path and a permission mode.")
+		}
+		var fmode uint32
+		ifmode, err := sc.Atoi(args[1])
+		fmode = uint32(ifmode)
+		if err != nil {
+			log.Fatal("Error, invalid file mode for permission set.")
+		}
+		Creat(p9p.OREAD, fmode)
+	
 	case "mkdir":
 
 	case "rm":
@@ -515,6 +535,47 @@ func main() {
 
 }
 
+
+// Create a file
+func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
+	err = nil
+	iounit = 0
+	
+	// Walk -- extract the name in the path to make
+	names := mknames(args[0])
+	tomake := names[len(names)-1]
+	names = names[:len(names)-1]
+
+	// BUG?: We cannot make files in "/" on jsonfs, but can in child dirs
+	var fid = rfid
+	if len(names) > 0 {
+		// We are not in "/"
+		nfid++
+		fid = nfid
+		_, err = Walk(rfid, fid, names...)
+		if err != nil {
+			log.Fatal("Error, unable to walk for create: ", err)
+		}
+		defer Clunk(fid)
+	}
+
+	// Create
+	debug(client, create, f2s(fid), tomake, sc.Itoa(int(perm)), sc.Itoa(int(mode)))
+	qid, iounit, err = session.Create(ctx, fid, tomake, perm, mode)
+	if err != nil {
+		debug(server, rerror, err.Error())
+		return
+	}
+
+	if iounit < 1 {
+		// size of message max minus fcall io header (Rread)
+		iounit = uint32(msize - 24)
+	}
+
+	debug(server, create, qid.String(), sc.Itoa(int(iounit)))
+
+	return
+}
 
 // List files in a directory
 func Ls() error {
