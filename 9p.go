@@ -378,61 +378,6 @@ func Read(m mode) ([]byte, error) {
 	return allbytes, nil
 }
 
-// Write to a file
-func Write() error {
-	nfid++
-	var fid p9p.Fid = nfid
-	defer Clunk(fid)
-
-	// Walk -- don't need []Qid's for now
-	names := mknames(args[0])
-	_, err := Walk(rfid, fid, names...)
-	if err != nil {
-		log.Fatal("Error, walk for open failed: ", err)
-	}
-
-	// Open -- don't need Qid for now
-	_, width, err := Open(fid, p9p.OWRITE)
-	if err != nil {
-		log.Fatal("Error, Open failed: ", err)
-	}
-	buf := make([]byte, width)
-
-	// Write -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
-	var offset int64 = 0
-	// count in this fn is the sum of bytes read
-	var count int = 0
-	var n int = 1
-	for ;; offset += int64(n) {
-			buf = make([]byte, width)			
-			n, err = os.Stdin.Read(buf)
-			if n < 0 || err != nil {
-				log.Print("Error, read input error: ", err)
-			}
-						
-			count += n
-
-			if n == 0 {
-				break
-			}
-			
-			// Output
-			debug(client, write, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)), sc.Itoa(n))
-			nout, err := session.Write(ctx, fid, buf[:n], offset)
-			
-			if nout < 0 {
-				log.Fatal("Error, write error: ", err)
-			}
-			if err != nil {
-				debug(server, rerror, err.Error())
-			} else {
-				debug(server, write, sc.Itoa(n))
-			}
-	}
-			
-	return nil
-}
-
 // Stat a file
 func Stat(m mode) (info p9p.Dir, err error) {
 	wr := tabwriter.NewWriter(os.Stdout, 0, 8, 8, ' ', 0)
@@ -481,6 +426,7 @@ func main() {
 		rm
 		mkdir
 		write
+		chmod
 	`
 	
 	ctx = context.Background()
@@ -628,13 +574,51 @@ func main() {
 			log.Fatal("Error, unable to open for open: ", err)
 		}
 	
-	case "wstat":
-		
+	case "chmod":
+		if len(args) != 2 {
+			log.Fatal("Error, chmod takes a file path and a permission mode.")
+		}
+		Chmod()
 
 	default:
 		log.Fatal("Error, Specify a valid operation to perform.")
 	}
 
+}
+
+
+// Call wstat and change mode on a file
+func Chmod() error {
+	dir, err := Stat(nowrite)
+	imode, err := sc.Atoi(args[1])
+	mode := uint32(imode)
+	dir.Mode = mode
+	
+	nfid++
+	fid := nfid
+	defer Clunk(fid)
+
+	// Walk -- extract the name in the path to mod
+	names := mknames(args[0])
+
+	_, err = Walk(rfid, fid, names...)
+	if err != nil {
+		log.Fatal("Error, unable to walk for wstat: ", err)
+	}
+	
+	// Open
+	_, _, err = Open(fid, p9p.ORDWR)
+	if err != nil {
+		log.Fatal("Error, unable to open for wstat: ", err)
+	}
+	debug(client, wstat)
+	err = session.WStat(ctx, fid, dir)
+	if err != nil {
+		debug(server, rerror, err.Error())
+	}
+	debug(server, wstat)
+
+	return nil
 }
 
 // Remove a file
@@ -662,6 +646,61 @@ func Remove() error {
 	}
 	debug(server, remove)
 	
+	return nil
+}
+
+// Write to a file
+func Write() error {
+	nfid++
+	var fid p9p.Fid = nfid
+	defer Clunk(fid)
+
+	// Walk -- don't need []Qid's for now
+	names := mknames(args[0])
+	_, err := Walk(rfid, fid, names...)
+	if err != nil {
+		log.Fatal("Error, walk for open failed: ", err)
+	}
+
+	// Open -- don't need Qid for now
+	_, width, err := Open(fid, p9p.OWRITE)
+	if err != nil {
+		log.Fatal("Error, Open failed: ", err)
+	}
+	buf := make([]byte, width)
+
+	// Write -- might have to loop through msize-ish chunks using offsets (see: 9p.c in p9p)
+	var offset int64 = 0
+	// count in this fn is the sum of bytes read
+	var count int = 0
+	var n int = 1
+	for ;; offset += int64(n) {
+			buf = make([]byte, width)			
+			n, err = os.Stdin.Read(buf)
+			if n < 0 || err != nil {
+				log.Print("Error, read input error: ", err)
+			}
+						
+			count += n
+
+			if n == 0 {
+				break
+			}
+			
+			// Output
+			debug(client, write, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)), sc.Itoa(n))
+			nout, err := session.Write(ctx, fid, buf[:n], offset)
+			
+			if nout < 0 {
+				log.Fatal("Error, write error: ", err)
+			}
+			if err != nil {
+				debug(server, rerror, err.Error())
+			} else {
+				debug(server, write, sc.Itoa(n))
+			}
+	}
+			
 	return nil
 }
 
