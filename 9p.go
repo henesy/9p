@@ -202,6 +202,13 @@ func chattyprint(s source, o op, extras ...string) {
 			log.Printf("%c %s dir=%s", arrow, msg, extras[0])
 		
 		case wstat:
+			if s == client {
+				msg = "Twstat"
+				log.Printf("%c %s fid=%s", arrow, msg, extras[0])
+				break
+			}
+			msg = "Rwstat"
+			log.Printf("%c %s dir=%s", arrow, msg, extras[0])
 
 		case write:
 			if s == client {
@@ -611,12 +618,13 @@ func Chmod() error {
 	if err != nil {
 		log.Fatal("Error, unable to open for wstat: ", err)
 	}
-	debug(client, wstat)
+	debug(client, wstat, f2s(fid))
+	fmt.Fprint(os.Stderr, names, mode, fid)
 	err = session.WStat(ctx, fid, dir)
 	if err != nil {
 		debug(server, rerror, err.Error())
 	}
-	debug(server, wstat)
+	debug(server, wstat, dir.String())
 
 	return nil
 }
