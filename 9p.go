@@ -596,7 +596,9 @@ func main() {
 
 // Call wstat and change mode on a file
 func Chmod() error {
-	dir, err := Stat(nowrite)
+	var dir p9p.Dir
+	//dir, err := Stat(nowrite)
+	_, err := Stat(nowrite)
 	imode, err := sc.Atoi(args[1])
 	mode := uint32(imode)
 	dir.Mode = mode
