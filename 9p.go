@@ -61,6 +61,8 @@ const (
 	read
 	clunk
 	stat
+	wstat
+	remove
 )
 
 // Control for Read()
@@ -197,6 +199,18 @@ func chattyprint(s source, o op, extras ...string) {
 			}
 			msg = "Rstat"
 			log.Printf("%c %s dir=%s", arrow, msg, extras[0])
+		
+		case wstat:
+
+			
+		case remove:
+			if s == client {
+				msg = "Tremove"
+				log.Printf("%c %s fid=%s", arrow, msg, extras[0])
+				break
+			}
+			msg = "Rremove"
+			log.Printf("%c %s", arrow, msg)
 
 		case rerror:
 			msg = "Rerror"
@@ -506,8 +520,22 @@ func main() {
 		Creat(p9p.OREAD, fmode)
 	
 	case "mkdir":
-
+		if len(args) != 2 {
+			log.Fatal("Error, mkdir takes a file path and a permission mode.")
+		}
+		var fmode uint32
+		ifmode, err := sc.Atoi(args[1])
+		fmode = uint32(ifmode)
+		if err != nil {
+			log.Fatal("Error, invalid file mode for permission set.")
+		}
+		Creat(p9p.OREAD, fmode | uint32(os.ModeDir))
+	
 	case "rm":
+		if len(args) > 1 {
+			log.Fatal("Error, rm takes a single argument.")
+		}
+		Remove()
 
 	case "open":
 		if len(args) > 1 {
@@ -528,6 +556,9 @@ func main() {
 		if err != nil {
 			log.Fatal("Error, unable to open for open: ", err)
 		}
+	
+	case "wstat":
+		
 
 	default:
 		log.Fatal("Error, Specify a valid operation to perform.")
@@ -535,6 +566,33 @@ func main() {
 
 }
 
+// Remove a file
+func Remove() error {
+	nfid++
+	fid := nfid
+	defer Clunk(fid)
+
+	// Walk
+	names := mknames(args[0])
+	_, err := Walk(rfid, fid, names...)
+	if err != nil {
+		log.Fatal("Error, unable to walk for remove: ", err)
+	}
+	
+	// Open
+	_, _, err = Open(fid, p9p.ORDWR)
+	if err != nil {
+		log.Fatal("Error, unable to open for remove: ", err)
+	}
+	debug(client, remove, f2s(fid))
+	err = session.Remove(ctx, fid)
+	if err != nil {
+		debug(server, rerror, err.Error())
+	}
+	debug(server, remove)
+	
+	return nil
+}
 
 // Create a file
 func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
