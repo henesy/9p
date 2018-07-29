@@ -103,6 +103,9 @@ func parsedialstr(dialstr string) (proto, address string) {
 			}
 		}
 
+	} else {
+		// As per srv(4), use 9fs default port
+		address += ":564"
 	}
 
 	return
