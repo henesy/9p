@@ -133,8 +133,9 @@ func chattyprint(s source, o op, extras ...string) {
 		case version:
 			if s == client {
 				msg = "Tversion"
+			} else {
+				msg = "Rversion"
 			}
-			msg = "Rversion"
 			log.Printf("%c %s msize=%d version=%s", arrow, msg, msize, pversion)
 
 		case clunk:
