@@ -539,25 +539,21 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, create takes a file path and a permission mode.")
 		}
-		var fmode uint32
-		ifmode, err := sc.Atoi(args[1])
-		fmode = uint32(ifmode)
+		fmode64, err := sc.ParseUint(args[1], 10, 32)
 		if err != nil {
 			log.Fatal("Error, invalid file mode for permission set.")
 		}
-		Creat(p9p.OREAD, fmode)
+		Creat(p9p.OREAD, uint32(fmode64))
 	
 	case "mkdir":
 		if len(args) != 2 {
 			log.Fatal("Error, mkdir takes a file path and a permission mode.")
 		}
-		var fmode uint32
-		ifmode, err := sc.Atoi(args[1])
-		fmode = uint32(ifmode)
+		fmode64, err := sc.ParseUint(args[1], 10, 32)
 		if err != nil {
 			log.Fatal("Error, invalid file mode for permission set.")
 		}
-		Creat(p9p.OREAD, fmode | uint32(os.ModeDir))
+		Creat(p9p.OREAD, uint32(fmode64) | uint32(os.ModeDir))
 	
 	case "rm":
 		if len(args) > 1 {
@@ -603,10 +599,9 @@ func Chmod() error {
 	var dir p9p.Dir
 	//dir, err := Stat(nowrite)
 	odir, err := Stat(nowrite)
-	imode, err := sc.Atoi(args[1])
-	mode := uint32(imode)
+	mode64, err := sc.ParseUint(args[1], 10, 32)
 	dir = odir
-	dir.Mode = mode
+	dir.Mode = uint32(mode64)
 	dir.Name = odir.Name
 	dir.UID = odir.UID
 	dir.GID = odir.GID
