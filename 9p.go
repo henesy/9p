@@ -118,7 +118,7 @@ func mknames(path string) []string {
 
 // Converts a p9p.Fid to a string and so forth
 func f2s(fid p9p.Fid) string {
-	return sc.Itoa(int(fid))
+	return fmt.Sprint(fid)
 }
 
 // If chatty is enabled, print out 9p transactions. go-p9p does not provide this, sadly. 
@@ -296,7 +296,7 @@ func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
 	err = nil
 	iounit = 0
 
-	debug(client, open, f2s(fid), sc.Itoa(int(mode)))
+	debug(client, open, f2s(fid), fmt.Sprint(mode))
 	qid, iounit, err = session.Open(ctx, fid, mode)
 	if err != nil {
 		debug(server, rerror, err.Error())
@@ -308,7 +308,7 @@ func Open(fid p9p.Fid, mode p9p.Flag) (qid p9p.Qid, iounit uint32, err error) {
 		iounit = uint32(msize - 24)
 	}
 
-	debug(server, open, qid.String(), sc.Itoa(int(iounit)))
+	debug(server, open, qid.String(), fmt.Sprint(iounit))
 
 	return
 }
@@ -343,7 +343,7 @@ func Read(m mode) ([]byte, error) {
 	var n int = 1
 	for ;; offset += int64(n) {
 			buf = make([]byte, width)
-			debug(client, read, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)))
+			debug(client, read, f2s(fid), fmt.Sprint(offset), fmt.Sprint(width))
 			n, err = session.Read(ctx, fid, buf, offset)
 			//fmt.Fprintln(os.Stderr, "Read: ", n, err)
 			count += n
@@ -354,7 +354,7 @@ func Read(m mode) ([]byte, error) {
 			if err != nil {
 				debug(server, rerror, err.Error())
 			} else {
-				debug(server, read, sc.Itoa(n))
+				debug(server, read, fmt.Sprint(n))
 			}
 
 			if n == 0 {
@@ -708,7 +708,7 @@ func Write() error {
 			}
 			
 			// Output
-			debug(client, write, f2s(fid), sc.Itoa(int(offset)), sc.Itoa(int(width)), sc.Itoa(n))
+			debug(client, write, f2s(fid), fmt.Sprint(offset), fmt.Sprint(width), fmt.Sprint(n))
 			nout, err := session.Write(ctx, fid, buf[:n], offset)
 			
 			if nout < 0 {
@@ -717,7 +717,7 @@ func Write() error {
 			if err != nil {
 				debug(server, rerror, err.Error())
 			} else {
-				debug(server, write, sc.Itoa(n))
+				debug(server, write, fmt.Sprint(n))
 			}
 	}
 			
@@ -748,7 +748,7 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 	}
 
 	// Create
-	debug(client, create, f2s(fid), tomake, sc.Itoa(int(perm)), sc.Itoa(int(mode)))
+	debug(client, create, f2s(fid), tomake, fmt.Sprint(perm), fmt.Sprint(mode))
 	qid, iounit, err = session.Create(ctx, fid, tomake, perm, mode)
 	if err != nil {
 		debug(server, rerror, err.Error())
@@ -760,7 +760,7 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 		iounit = uint32(msize - 24)
 	}
 
-	debug(server, create, qid.String(), sc.Itoa(int(iounit)))
+	debug(server, create, qid.String(), fmt.Sprint(iounit))
 
 	return
 }
