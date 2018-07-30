@@ -602,10 +602,15 @@ func main() {
 func Chmod() error {
 	var dir p9p.Dir
 	//dir, err := Stat(nowrite)
-	_, err := Stat(nowrite)
+	odir, err := Stat(nowrite)
 	imode, err := sc.Atoi(args[1])
 	mode := uint32(imode)
+	dir = odir
 	dir.Mode = mode
+	dir.Name = odir.Name
+	dir.UID = odir.UID
+	dir.GID = odir.GID
+	dir.MUID = odir.MUID
 	
 	nfid++
 	fid := nfid
@@ -625,7 +630,8 @@ func Chmod() error {
 		log.Fatal("Error, unable to open for wstat: ", err)
 	}
 	debug(client, wstat, f2s(fid))
-	fmt.Fprint(os.Stderr, names, mode, fid)
+	fmt.Fprintln(os.Stderr, odir)
+	fmt.Fprintln(os.Stderr, dir)
 	err = session.WStat(ctx, fid, dir)
 	if err != nil {
 		debug(server, rerror, err.Error())
