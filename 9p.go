@@ -672,7 +672,7 @@ func Remove() error {
 	}
 	
 	// Open
-	_, _, err = Open(fid, p9p.ORDWR)
+	_, _, err = Open(fid, p9p.OWRITE)
 	if err != nil {
 		log.Fatal("Error, unable to open for remove: ", err)
 	}
