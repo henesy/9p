@@ -420,6 +420,20 @@ func Stat(m mode) (info p9p.Dir, err error) {
 	return info, nil
 }
 
+// Perms: dalTLDpSugct rwxrwxrwx
+// Takes a uint32 and converts it into a string form binary uint32 (for permission modes)
+func p2b(perm uint32) (buf string) {
+	buf = sc.FormatUint(uint64(perm), 2)
+	return
+}
+
+// Takes a string form of a binary uint32 and converts it back to a uint32 (for permission modes)
+func b2p(buf string) (perm uint32) {
+	perm64, _ := sc.ParseUint(buf, 2, 32)
+	perm = uint32(perm64)
+	return
+}
+
 
 /* A program for connecting to 9p file servers and performing client ops. */
 func main() {
@@ -594,6 +608,7 @@ func main() {
 }
 
 
+// https://play.golang.org/p/ytXzl-ZEfyj
 // Call wstat and change mode on a file
 func Chmod() error {
 	var dir p9p.Dir
@@ -729,7 +744,6 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 	tomake := names[len(names)-1]
 	names = names[:len(names)-1]
 
-	// BUG?: We cannot make files in "/" on jsonfs, but can in child dirs
 	var fid = rfid
 	if len(names) > 0 {
 		// We are not in "/"
@@ -741,6 +755,10 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 		}
 		defer Clunk(fid)
 	}
+
+	// Debug
+	buf := p2b(perm)
+	fmt.Fprintln(os.Stderr, buf)
 
 	// Create
 	debug(client, create, f2s(fid), tomake, fmt.Sprint(perm), fmt.Sprint(mode))
@@ -788,6 +806,10 @@ func Ls() error {
 		if os.FileMode(dir.Mode).IsDir() {
 			name += "/"
 		}
+		
+		// Debug
+		fmt.Fprintln(os.Stderr, dir.Name, "\n", p2b(dir.Mode))
+
 		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(dir.Mode), dir.Length, dir.ModTime.Format(timeFormat), name)
 	}
 	
