@@ -670,12 +670,8 @@ func Remove() error {
 	if err != nil {
 		log.Fatal("Error, unable to walk for remove: ", err)
 	}
-	
-	// Open
-	_, _, err = Open(fid, p9p.OWRITE)
-	if err != nil {
-		log.Fatal("Error, unable to open for remove: ", err)
-	}
+
+	// Remove
 	debug(client, remove, f2s(fid))
 	err = session.Remove(ctx, fid)
 	if err != nil {
