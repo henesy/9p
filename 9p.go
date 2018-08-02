@@ -628,7 +628,7 @@ func Chmod() error {
 
 	dir.Mode = b2p(string(opermstr))
 
-	fmt.Fprintln(os.Stderr, string(permstr), p2b(dir.Mode))
+	//fmt.Fprintln(os.Stderr, string(permstr), p2b(dir.Mode))
 
 	nfid++
 	fid := nfid
@@ -648,7 +648,7 @@ func Chmod() error {
 		log.Fatal("Error, unable to open for wstat: ", err)
 	}
 	debug(client, wstat, f2s(fid))
-	fmt.Fprintln(os.Stderr, dir)
+	//fmt.Fprintln(os.Stderr, dir)
 	err = session.WStat(ctx, fid, dir)
 	if err != nil {
 		debug(server, rerror, err.Error())
@@ -815,7 +815,7 @@ func Ls() error {
 		}
 		
 		// Debug
-		fmt.Fprintln(os.Stderr, dir.Name, "\n", p2b(dir.Mode))
+		//fmt.Fprintln(os.Stderr, dir.Name, "\n", p2b(dir.Mode))
 
 		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(dir.Mode), dir.Length, dir.ModTime.Format(timeFormat), name)
 	}
