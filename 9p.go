@@ -760,7 +760,7 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 	}
 
 	// Debug
-	buf := p2b(perm)
+	//buf := p2b(perm)
 	//fmt.Fprintln(os.Stderr, buf)
 
 	// Create
