@@ -553,7 +553,7 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, create takes a file path and a permission mode.")
 		}
-		fmode64, err := sc.ParseUint(args[1], 10, 32)
+		fmode64, err := sc.ParseUint(args[1], 8, 32)
 		if err != nil {
 			log.Fatal("Error, invalid file mode for permission set.")
 		}
@@ -563,7 +563,7 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, mkdir takes a file path and a permission mode.")
 		}
-		fmode64, err := sc.ParseUint(args[1], 10, 32)
+		fmode64, err := sc.ParseUint(args[1], 8, 32)
 		if err != nil {
 			log.Fatal("Error, invalid file mode for permission set.")
 		}
@@ -599,6 +599,9 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, chmod takes a file path and a permission mode.")
 		}
+		if len(args[1]) != 4 {
+			log.Fatal("Error, invalid permission format. Use the form 0777, for example.")
+		}
 		Chmod()
 
 	default:
@@ -611,17 +614,22 @@ func main() {
 // https://play.golang.org/p/ytXzl-ZEfyj
 // Call wstat and change mode on a file
 func Chmod() error {
-	var dir p9p.Dir
+	//var ndir p9p.Dir
 	//dir, err := Stat(nowrite)
-	odir, err := Stat(nowrite)
-	mode64, err := sc.ParseUint(args[1], 10, 32)
-	dir = odir
-	dir.Mode = uint32(mode64)
-	dir.Name = odir.Name
-	dir.UID = odir.UID
-	dir.GID = odir.GID
-	dir.MUID = odir.MUID
-	
+	dir, err := Stat(nowrite)
+	uperm64, err := sc.ParseUint(args[1], 8, 32)
+
+	permstr := []byte(p2b(uint32(uperm64)))
+	opermstr := []byte(p2b(dir.Mode))
+	//opermstr[32-9:] = permstr
+	for i, j := 32-9, 0; i < len(opermstr); i, j = i+1, j+1 {
+		opermstr[i] = permstr[j]
+	}
+
+	dir.Mode = b2p(string(opermstr))
+
+	fmt.Fprintln(os.Stderr, string(permstr), p2b(dir.Mode))
+
 	nfid++
 	fid := nfid
 	defer Clunk(fid)
@@ -635,12 +643,11 @@ func Chmod() error {
 	}
 	
 	// Open
-	_, _, err = Open(fid, p9p.ORDWR)
+	_, _, err = Open(fid, p9p.OWRITE)
 	if err != nil {
 		log.Fatal("Error, unable to open for wstat: ", err)
 	}
 	debug(client, wstat, f2s(fid))
-	fmt.Fprintln(os.Stderr, odir)
 	fmt.Fprintln(os.Stderr, dir)
 	err = session.WStat(ctx, fid, dir)
 	if err != nil {
