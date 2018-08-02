@@ -642,18 +642,14 @@ func Chmod() error {
 		log.Fatal("Error, unable to walk for wstat: ", err)
 	}
 	
-	// Open
-	_, _, err = Open(fid, p9p.OWRITE)
-	if err != nil {
-		log.Fatal("Error, unable to open for wstat: ", err)
-	}
 	debug(client, wstat, f2s(fid))
 	//fmt.Fprintln(os.Stderr, dir)
 	err = session.WStat(ctx, fid, dir)
 	if err != nil {
 		debug(server, rerror, err.Error())
+	} else {
+		debug(server, wstat, dir.String())
 	}
-	debug(server, wstat, dir.String())
 
 	return nil
 }
@@ -670,8 +666,14 @@ func Remove() error {
 	if err != nil {
 		log.Fatal("Error, unable to walk for remove: ", err)
 	}
-
-	// Remove
+	
+	// Open
+	/*
+	_, _, err = Open(fid, p9p.OWRITE | p9p.ORCLOSE)
+	if err != nil {
+		log.Fatal("Error, unable to open for remove: ", err)
+	}
+	*/
 	debug(client, remove, f2s(fid))
 	err = session.Remove(ctx, fid)
 	if err != nil {
