@@ -420,6 +420,20 @@ func Stat(m mode) (info p9p.Dir, err error) {
 	return info, nil
 }
 
+// Perms: dalTLDpSugct rwxrwxrwx
+// Takes a uint32 and converts it into a string form binary uint32 (for permission modes)
+func p2b(perm uint32) (buf string) {
+	buf = sc.FormatUint(uint64(perm), 2)
+	return
+}
+
+// Takes a string form of a binary uint32 and converts it back to a uint32 (for permission modes)
+func b2p(buf string) (perm uint32) {
+	perm64, _ := sc.ParseUint(buf, 2, 32)
+	perm = uint32(perm64)
+	return
+}
+
 
 /* A program for connecting to 9p file servers and performing client ops. */
 func main() {
@@ -539,7 +553,7 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, create takes a file path and a permission mode.")
 		}
-		fmode64, err := sc.ParseUint(args[1], 10, 32)
+		fmode64, err := sc.ParseUint(args[1], 8, 32)
 		if err != nil {
 			log.Fatal("Error, invalid file mode for permission set.")
 		}
@@ -549,7 +563,7 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, mkdir takes a file path and a permission mode.")
 		}
-		fmode64, err := sc.ParseUint(args[1], 10, 32)
+		fmode64, err := sc.ParseUint(args[1], 8, 32)
 		if err != nil {
 			log.Fatal("Error, invalid file mode for permission set.")
 		}
@@ -585,6 +599,9 @@ func main() {
 		if len(args) != 2 {
 			log.Fatal("Error, chmod takes a file path and a permission mode.")
 		}
+		if len(args[1]) != 4 {
+			log.Fatal("Error, invalid permission format. Use the form 0777, for example.")
+		}
 		Chmod()
 
 	default:
@@ -594,19 +611,25 @@ func main() {
 }
 
 
+// https://play.golang.org/p/ytXzl-ZEfyj
 // Call wstat and change mode on a file
 func Chmod() error {
-	var dir p9p.Dir
+	//var ndir p9p.Dir
 	//dir, err := Stat(nowrite)
-	odir, err := Stat(nowrite)
-	mode64, err := sc.ParseUint(args[1], 10, 32)
-	dir = odir
-	dir.Mode = uint32(mode64)
-	dir.Name = odir.Name
-	dir.UID = odir.UID
-	dir.GID = odir.GID
-	dir.MUID = odir.MUID
-	
+	dir, err := Stat(nowrite)
+	uperm64, err := sc.ParseUint(args[1], 8, 32)
+
+	permstr := []byte(p2b(uint32(uperm64)))
+	opermstr := []byte(p2b(dir.Mode))
+	//opermstr[32-9:] = permstr
+	for i, j := 32-9, 0; i < len(opermstr); i, j = i+1, j+1 {
+		opermstr[i] = permstr[j]
+	}
+
+	dir.Mode = b2p(string(opermstr))
+
+	//fmt.Fprintln(os.Stderr, string(permstr), p2b(dir.Mode))
+
 	nfid++
 	fid := nfid
 	defer Clunk(fid)
@@ -619,19 +642,14 @@ func Chmod() error {
 		log.Fatal("Error, unable to walk for wstat: ", err)
 	}
 	
-	// Open
-	_, _, err = Open(fid, p9p.ORDWR)
-	if err != nil {
-		log.Fatal("Error, unable to open for wstat: ", err)
-	}
 	debug(client, wstat, f2s(fid))
-	fmt.Fprintln(os.Stderr, odir)
-	fmt.Fprintln(os.Stderr, dir)
+	//fmt.Fprintln(os.Stderr, dir)
 	err = session.WStat(ctx, fid, dir)
 	if err != nil {
 		debug(server, rerror, err.Error())
+	} else {
+		debug(server, wstat, dir.String())
 	}
-	debug(server, wstat, dir.String())
 
 	return nil
 }
@@ -650,10 +668,12 @@ func Remove() error {
 	}
 	
 	// Open
-	_, _, err = Open(fid, p9p.ORDWR)
+	/*
+	_, _, err = Open(fid, p9p.OWRITE | p9p.ORCLOSE)
 	if err != nil {
 		log.Fatal("Error, unable to open for remove: ", err)
 	}
+	*/
 	debug(client, remove, f2s(fid))
 	err = session.Remove(ctx, fid)
 	if err != nil {
@@ -729,7 +749,6 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 	tomake := names[len(names)-1]
 	names = names[:len(names)-1]
 
-	// BUG?: We cannot make files in "/" on jsonfs, but can in child dirs
 	var fid = rfid
 	if len(names) > 0 {
 		// We are not in "/"
@@ -741,6 +760,10 @@ func Creat(mode p9p.Flag, perm uint32) (qid p9p.Qid, iounit uint32, err error) {
 		}
 		defer Clunk(fid)
 	}
+
+	// Debug
+	//buf := p2b(perm)
+	//fmt.Fprintln(os.Stderr, buf)
 
 	// Create
 	debug(client, create, f2s(fid), tomake, fmt.Sprint(perm), fmt.Sprint(mode))
@@ -788,6 +811,10 @@ func Ls() error {
 		if os.FileMode(dir.Mode).IsDir() {
 			name += "/"
 		}
+		
+		// Debug
+		//fmt.Fprintln(os.Stderr, dir.Name, "\n", p2b(dir.Mode))
+
 		fmt.Fprintf(wr, "%v\t%v\t%v\t%s\n", os.FileMode(dir.Mode), dir.Length, dir.ModTime.Format(timeFormat), name)
 	}
 	
