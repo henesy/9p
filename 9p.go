@@ -712,7 +712,7 @@ func Write() error {
 	for ;; offset += int64(n) {
 			buf = make([]byte, width)			
 			n, err = os.Stdin.Read(buf)
-			if n < 0 || err != nil {
+			if (n < 0 || err != nil) && err != io.EOF {
 				log.Print("Error, read input error: ", err)
 			}
 						
@@ -726,7 +726,7 @@ func Write() error {
 			debug(client, write, f2s(fid), fmt.Sprint(offset), fmt.Sprint(width), fmt.Sprint(n))
 			nout, err := session.Write(ctx, fid, buf[:n], offset)
 			
-			if nout < 0 {
+			if nout < 0 || err != nil {
 				log.Fatal("Error, write error: ", err)
 			}
 			if err != nil {
