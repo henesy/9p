@@ -726,7 +726,7 @@ func Write() error {
 			debug(client, write, f2s(fid), fmt.Sprint(offset), fmt.Sprint(width), fmt.Sprint(n))
 			nout, err := session.Write(ctx, fid, buf[:n], offset)
 			
-			if nout < 0 || err != nil {
+			if (nout < 0 || err != nil) && !strings.Contains(err.Error(), "short write") {
 				log.Fatal("Error, write error: ", err)
 			}
 			if err != nil {
