@@ -103,7 +103,7 @@ func parsedialstr(dialstr string) (proto, address string) {
 			}
 		}
 
-	} else {
+	} else if !strings.Contains(dialstr, "unix!") {
 		// As per srv(4), use 9fs default port
 		address += ":564"
 	}
